@@ -2,7 +2,7 @@
 
 ```mermaid
 flowchart LR
-    ESP["ESP32 / Wokwi"] --> NGROK["ngrok tunnel\nhttps://xxx.ngrok-free.app"]
+    ESP["ESP32 / Wokwi"] --> NGROK["Cloudflare Tunnel\nhttps://xxx.trycloudflare.com"]
     GEN["Auto-Test\ngenerator.py"] --> API
 
     NGROK --> API["FastAPI Backend\n(:8000)"]

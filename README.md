@@ -9,14 +9,14 @@ POC d'un gilet intelligent de détection de mauvaise posture en temps réel pour
 ```
 ESP32 (Wokwi simulator)
   └─ génère des données MPU-6050 synthétiques (4 archétypes de posture)
-  └─ WiFi "Wokwi-GUEST" → tunnel ngrok
+  └─ WiFi "Wokwi-GUEST" → tunnel Cloudflare
   └─ POST /data → FastAPI (Python 3.12)
         └─ détection posture (règles à seuils)
         └─ PostgreSQL 16 (table sensor_readings)
 ```
 
 Deux sources de données interchangeables :
-- **Simulateur Wokwi** (`wokwi/`) — firmware ESP32 via HTTP et tunnel ngrok
+- **Simulateur Wokwi** (`wokwi/`) — firmware ESP32 via HTTP et tunnel Cloudflare
 - **Générateur Auto-Test** (`auto_test/generator.py`) — Python pur, sans simulateur
 
 ---
@@ -27,90 +27,17 @@ Deux sources de données interchangeables :
 |--------|-------------|---------------|
 | Embarqué (simulé) | ESP32 + PlatformIO + Wokwi | Simulation WiFi réelle, MPU-6050 intégré, accès internet depuis le simulateur |
 | Capteur | MPU-6050 (accéléromètre + gyroscope 6 axes) | Standard industrie pour détection de mouvement/posture |
-| Tunnel | ngrok (HTTP) | Expose localhost au simulateur cloud Wokwi sans configuration réseau |
+| Tunnel | Cloudflare Tunnel (HTTP) | Expose localhost au simulateur cloud Wokwi sans configuration réseau, sans compte requis |
 | Backend | FastAPI + Python 3.12 | Validation auto avec Pydantic, Swagger UI généré, async natif |
 | ORM / BDD | SQLAlchemy + PostgreSQL 16 | Typage fort, migrations futures, fiabilité production |
 | Containerisation | Docker Compose | Déploiement reproductible, healthcheck pg_isready |
 
----
-
-## Diagramme de flux de données
-
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                      Source de données                          │
-│                                                                 │
-│  [ESP32 / Wokwi]          [Auto-Test generator.py]             │
-│  MPU-6050 synthétique      Python pur, 4 scénarios             │
-│  WiFi Wokwi-GUEST          distribution 60/20/12/8%            │
-│        │                          │                            │
-│        └──────── HTTP POST ────────┘                           │
-└─────────────────────────────────────────────────────────────────┘
-                            │
-                            ▼
-              ┌─────────────────────────┐
-              │   POST /data            │
-              │   FastAPI backend       │
-              │   localhost:8000        │
-              │                         │
-              │  1. Validation Pydantic  │
-              │  2. detect_posture()    │
-              │     ├─ gyro_norm>100    │ → sudden_movement
-              │     ├─ |accel_x|>0.4g  │ → forward_lean
-              │     ├─ |accel_y|>0.4g  │ → side_lean
-              │     └─ sinon           │ → good
-              │  3. INSERT PostgreSQL   │
-              └─────────────────────────┘
-                            │
-                            ▼
-              ┌─────────────────────────┐
-              │   PostgreSQL 16         │
-              │   table sensor_readings │
-              │                         │
-              │  id, timestamp          │
-              │  accel_x/y/z (g)        │
-              │  gyro_x/y/z (°/s)       │
-              │  posture_ok (bool)      │
-              │  posture_label (string) │
-              └─────────────────────────┘
-                            │
-              ┌─────────────┴──────────────┐
-              ▼                            ▼
-     GET /data?limit=50          GET /data/stats
-     dernières mesures           taux bonnes/mauvaises
-```
-
----
-
-## Placement du capteur sur le gilet
-
-```
-        [dos du travailleur]
-
-        ┌────────────────┐
-        │                │
-        │   ┌────────┐   │
-        │   │MPU-6050│   │  ← capteur centré, entre les omoplates
-        │   │   ★    │   │    axe Z vertical (vers le haut)
-        │   └────────┘   │    posture droite : accel_z ≈ 1g
-        │                │                    accel_x ≈ 0
-        │     GILET      │                    accel_y ≈ 0
-        │                │
-        └────────────────┘
-
-  Inclinaison avant  → accel_x ↑  (>0.4g = alerte)
-  Inclinaison latérale → accel_y ↑ (>0.4g = alerte)
-  Mouvement brusque  → gyro_norm ↑ (>100°/s = alerte)
-```
-
----
-
 ## Prérequis
 
 - Docker Desktop
-- Python 3.10+ (pour auto_test uniquement)
+- Python 3.12+ (pour auto_test uniquement)
 - VS Code + extensions PlatformIO + Wokwi (pour simulation ESP32)
-- Compte ngrok (pour relier Wokwi au backend)
+- `cloudflared` CLI (pour relier Wokwi au backend)
 
 ---
 
@@ -140,14 +67,14 @@ python generator.py --interval 2.0       # une mesure toutes les 2 secondes
 
 ### 3. Simulation ESP32 via Wokwi (optionnel)
 
-> Nécessite un tunnel ngrok actif pointant vers localhost:8000
+> Nécessite un tunnel Cloudflare actif pointant vers localhost:8000
 
 ```bash
-# Terminal 1 : démarrer ngrok
-ngrok http 8000
+# Terminal 1 : démarrer le tunnel Cloudflare
+cloudflared tunnel --url http://localhost:8000
 
 # Mettre à jour l'URL dans wokwi/smartposture.ino :
-# const char* BACKEND_URL = "https://<votre-id>.ngrok-free.app/data";
+# const char* BACKEND_URL = "https://<votre-id>.trycloudflare.com/data";
 
 # Terminal 2 : compiler le firmware
 cd wokwi && pio run
@@ -162,13 +89,7 @@ cd wokwi && pio run
 
 ## API Endpoints
 
-| Méthode | Route | Description |
-|---------|-------|-------------|
-| POST | `/data` | Envoyer une mesure capteur (JSON) |
-| GET | `/data?limit=50` | Récupérer les dernières mesures |
-| GET | `/data/stats` | Taux de bonnes/mauvaises postures |
-| GET | `/health` | Santé de l'API |
-| GET | `/docs` | Swagger UI auto-généré |
+Accessible via Swagger UI : http://localhost:8000/docs
 
 ### Exemple de payload POST /data
 
