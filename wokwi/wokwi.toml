@@ -1,0 +1,13 @@
+[wokwi]
+version = 1
+firmware = ".pio/build/esp32dev/firmware.bin"
+elf = ".pio/build/esp32dev/firmware.elf"
+
+[diagram]
+version = 1
+file = "diagram.json"
+
+[serial]
+enabled = true
+port = "/dev/ttyUSB0"
+baudRate = 115200

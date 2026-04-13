@@ -1,0 +1,18 @@
+{
+  "version": 1,
+  "author": "SmartPosture",
+  "editor": "wokwi",
+  "parts": [
+    { "type": "board-esp32-devkit-c-v4", "id": "esp", "top": 100, "left": 200, "attrs": {} },
+    { "type": "wokwi-mpu6050", "id": "mpu", "top": 0, "left": 0, "attrs": { "label": "colonne_vertebrale" } }
+  ],
+  "connections": [
+    [ "esp:TX", "$serialMonitor:RX", "", [] ],
+    [ "esp:RX", "$serialMonitor:TX", "", [] ],
+    ["esp:3V3",   "mpu:VCC", "red",   []],
+    ["esp:GND.1", "mpu:GND", "black", []],
+    ["esp:21",    "mpu:SDA", "blue",  []],
+    ["esp:22",    "mpu:SCL", "green", []]
+  ],
+  "dependencies": {}
+}
